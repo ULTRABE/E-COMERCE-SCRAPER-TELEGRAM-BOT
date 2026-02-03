@@ -25,8 +25,7 @@ load_dotenv(dotenv_path=ENV_PATH, override=False)
 from dotenv import load_dotenv
 
 load_dotenv()
-main
-main
+
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OWNER_ID = _get_int_env("OWNER_ID", 0)
