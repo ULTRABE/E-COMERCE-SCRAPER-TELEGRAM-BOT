@@ -1,6 +1,6 @@
 # Indian E-commerce Deal Bot 🛍️
 
-A fully automated Telegram bot that scrapes deals from 8+ major Indian e-commerce sites and sends them to authorized groups/channels. Features owner-only authorization, keyword filtering, and automatic deal updates every 20 minutes.
+A fully automated Telegram bot that scrapes deals from 12+ major Indian e-commerce sites and sends them to authorized groups/channels. Features owner-only authorization, keyword filtering, premium emoji support, welcome messages, and automatic deal updates every 20 minutes.
 
 ## Features
 
@@ -10,7 +10,9 @@ A fully automated Telegram bot that scrapes deals from 8+ major Indian e-commerc
 - 🚫 **Duplicate Prevention**: Smart hash-based duplicate detection
 - 💎 **High-Quality Deals**: Only sends deals with 30%+ discount
 - 📊 **Statistics Tracking**: Monitor bot performance
-- 🛒 **8+ E-commerce Sites**: Amazon, Flipkart, Myntra, AJIO, Snapdeal, ShopClues, Croma, Vijay Sales
+- 🛒 **12+ E-commerce Sites**: Amazon, Flipkart, Myntra, AJIO, Snapdeal, ShopClues, Croma, Vijay Sales, Meesho, Tata CLIQ, Nykaa, Lenskart
+- 👋 **Welcome Messages**: Automatic welcome messages for new members with customizable templates
+- ✨ **Premium Emoji Support**: Easy-to-customize emoji templates for premium emoji packs
 
 ## Setup Instructions
 
@@ -74,6 +76,8 @@ python bot.py
 - `/only <keywords>` - Filter deals by keywords (e.g., `/only shoes iPhone`)
 - `/only clear` - Remove all keyword filters
 - `/stats` - Show bot statistics
+- `/welcome <message>` - **(Owner Only)** Set custom welcome message with placeholders
+- `/welcome default` - Reset to default welcome message
 
 ### Examples
 
@@ -120,16 +124,33 @@ Shows total deals sent, authorized chats, etc.
 
 ### 4. Message Format
 
+**Deal Message (with premium emoji support):**
 ```
-🎯 Product Name
+🔥 HOT DEAL 🔥
+━━━━━━━━━━━━━━━━━━
+📦 Product Name
+💰 Deal: ₹2,999
+💵 MRP: ₹5,999
+📉 Save: ₹3,000 (50% OFF)
+🔗 https://example.com/deal
+━━━━━━━━━━━━━━━━━━
+🛒 Buy Now! 🚀
+```
 
-💰 Deal Price: ₹2,999
-💸 Real Price: ₹5,999
-🔥 Discount: 50% OFF
+**Welcome Message:**
+```
+🎉 WELCOME! 🎉
+━━━━━━━━━━━━━━━━━━
+Hello @username! 👋
+Welcome to Group Name! 🎊
 
-🛒 Site: Amazon India
+🔥 Get best deals from:
+• Amazon, Flipkart, Myntra, AJIO
+• Snapdeal, ShopClues, Croma, Vijay Sales
+• Meesho, Tata CLIQ, Nykaa, Lenskart
 
-🔗 Buy Now (link)
+Enjoy saving money! 💰✨
+━━━━━━━━━━━━━━━━━━
 ```
 
 ## Technical Architecture
@@ -143,7 +164,8 @@ Shows total deals sent, authorized chats, etc.
 ├── database.py               # SQLite database operations
 ├── auth_manager.py           # Authorization logic
 ├── keyword_manager.py        # Keyword filtering
-├── message_formatter.py      # Deal message formatting
+├── welcome_manager.py        # Welcome message handling
+├── message_formatter.py      # Deal message formatting with premium emoji support
 ├── deal_processor.py         # Deal processing and ranking
 ├── scheduler.py              # APScheduler integration
 ├── requirements.txt          # Python dependencies
@@ -159,7 +181,11 @@ Shows total deals sent, authorized chats, etc.
     ├── snapdeal_scraper.py
     ├── shopclues_scraper.py
     ├── croma_scraper.py
-    └── vijaysales_scraper.py
+    ├── vijaysales_scraper.py
+    ├── meesho_scraper.py
+    ├── tata_cliq_scraper.py
+    ├── nykaa_scraper.py
+    └── lenskart_scraper.py
 ```
 
 ### Database Schema
@@ -234,6 +260,43 @@ Feel free to add more scrapers or improve existing ones! Follow the `BaseScraper
 ## License
 
 MIT License - Feel free to use and modify!
+
+## Premium Emoji Customization Guide
+
+The bot uses standard Unicode emojis by default, but you can easily replace them with premium emojis from your packs after deployment.
+
+### How to Customize Emojis
+
+1. **Edit `message_formatter.py`**: Replace the emoji constants at the top of the file
+2. **Available emoji categories**:
+   - `EMOJI_DEAL` - For deal announcements (AnimatedAsianEmoji pack)
+   - `EMOJI_MONEY`, `EMOJI_SPARKLE`, `EMOJI_PARTY` - For special messages (RestrictedEmoji pack)
+   - `EMOJI_CART`, `EMOJI_LINK`, `EMOJI_ROCKET` - For action buttons (RetroFontEmoji pack)
+   - `EMOJI_TAG`, `EMOJI_FIRE`, `EMOJI_DISCOUNT` - For deal details (NewsEmoji pack)
+
+3. **Example customization**:
+```python
+# Replace standard emojis with premium ones
+EMOJI_DEAL = "🔥"  # Replace with your premium fire emoji
+EMOJI_MONEY = "💰"  # Replace with your premium money emoji
+EMOJI_PARTY = "🎉"  # Replace with your premium party emoji
+```
+
+4. **Welcome message emojis**: Edit the `format_welcome_message` method in `message_formatter.py`
+
+### Premium Emoji Packs Recommendation
+
+- **AnimatedAsianEmoji** - Best for deal announcements
+- **RestrictedEmoji** - For special messages and highlights
+- **RetroFontEmoji** - For welcome messages and buttons
+- **NewsEmoji** - For deal updates and statistics
+
+### Easy Customization Tips
+
+- All emoji templates are clearly marked in the code
+- Use the same emoji style throughout for consistency
+- Test emojis in a private chat before deploying
+- Backup original emojis before making changes
 
 ## Support
 

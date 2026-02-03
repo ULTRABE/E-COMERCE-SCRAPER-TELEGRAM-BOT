@@ -5,11 +5,13 @@ import config
 from database import Database
 from auth_manager import AuthManager
 from keyword_manager import KeywordManager
+from welcome_manager import WelcomeManager
 from scheduler import DealScheduler
 
 db = Database()
 auth_manager = AuthManager(db)
 keyword_manager = KeywordManager(db)
+welcome_manager = WelcomeManager(db)
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
@@ -18,7 +20,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     welcome_message = """
 🛍️ **Welcome to Indian E-commerce Deal Bot!**
 
-I automatically scrape deals from 8+ major Indian e-commerce sites and send them to authorized groups/channels.
+I automatically scrape deals from 12+ major Indian e-commerce sites and send them to authorized groups/channels.
 
 **Commands:**
 /start - Show this message
@@ -27,15 +29,18 @@ I automatically scrape deals from 8+ major Indian e-commerce sites and send them
 /only <keywords> - Filter deals by keywords
 /only clear - Clear keyword filters
 /stats - Show bot statistics
+/welcome <message> - (Owner only) Set custom welcome message
+/welcome default - Reset to default welcome
 
 **How it works:**
 1. Bot must be authorized by owner using /auth
 2. Deals are automatically scraped every 20 minutes
 3. Only fresh, high-discount deals are sent
 4. Use /only to filter deals by your interests
+5. New members get welcome messages automatically
 
 **Sites covered:**
-Amazon, Flipkart, Myntra, AJIO, Snapdeal, ShopClues, Croma, Vijay Sales
+Amazon, Flipkart, Myntra, AJIO, Snapdeal, ShopClues, Croma, Vijay Sales, Meesho, Tata CLIQ, Nykaa, Lenskart
 """
     await update.message.reply_text(welcome_message)
 
@@ -56,14 +61,21 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 - Use `/only clear` to remove filters and get all deals
 - Keywords are case-insensitive
 
+**Welcome Messages:**
+- New members automatically receive welcome messages
+- Owner can customize welcome message with `/welcome <message>`
+- Use `{username}` and `{group_name}` as placeholders
+- Reset with `/welcome default`
+
 **Examples:**
 - `/only smartphone` - Only phone deals
 - `/only shoes sneakers` - Footwear deals
 - `/only laptop electronics` - Tech deals
+- `/welcome Hello {username}! Welcome to {group_name}!` - Custom welcome
 
 **Automatic Scraping:**
 - Runs every 20 minutes
-- Covers 8+ major e-commerce sites
+- Covers 12+ major e-commerce sites
 - Only sends new deals (no duplicates)
 - Minimum 30% discount filter
 
@@ -87,7 +99,7 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 🎯 Total deals sent: {total_deals:,}
 👥 Authorized chats: {authorized_chats}
 ⏰ Scrape interval: {config.SCRAPE_INTERVAL} minutes
-🛒 Sites monitored: 8
+🛒 Sites monitored: 12
 
 Bot is running and active! 🚀
 """
@@ -105,6 +117,9 @@ async def only_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await keyword_manager.handle_only_command(update, context)
 
+async def welcome_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await welcome_manager.handle_welcome_command(update, context, auth_manager)
+
 async def handle_new_chat_members(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.new_chat_members:
         return
@@ -115,6 +130,8 @@ async def handle_new_chat_members(update: Update, context: ContextTypes.DEFAULT_
                 "🔒 This bot is not authorized in this group. "
                 "Ask the bot owner to send /auth here to enable deal notifications."
             )
+        else:
+            await welcome_manager.handle_new_member(update, context, auth_manager)
 
 async def post_init(application: Application):
     scheduler = DealScheduler(application.bot, db)
@@ -139,6 +156,7 @@ def main():
     application.add_handler(CommandHandler("auth", auth_command))
     application.add_handler(CommandHandler("only", only_command))
     application.add_handler(CommandHandler("stats", stats_command))
+    application.add_handler(CommandHandler("welcome", welcome_command))
     application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, handle_new_chat_members))
     
     print("Bot started successfully!")

@@ -6,6 +6,10 @@ from .snapdeal_scraper import SnapdealScraper
 from .shopclues_scraper import ShopcluesScraper
 from .croma_scraper import CromaScraper
 from .vijaysales_scraper import VijaysalesScraper
+from .meesho_scraper import MeeshoScraper
+from .tata_cliq_scraper import TataCliqScraper
+from .nykaa_scraper import NykaaScraper
+from .lenskart_scraper import LenskartScraper
 
 ALL_SCRAPERS = [
     AmazonScraper,
@@ -16,4 +20,8 @@ ALL_SCRAPERS = [
     ShopcluesScraper,
     CromaScraper,
     VijaysalesScraper,
+    MeeshoScraper,
+    TataCliqScraper,
+    NykaaScraper,
+    LenskartScraper,
 ]
