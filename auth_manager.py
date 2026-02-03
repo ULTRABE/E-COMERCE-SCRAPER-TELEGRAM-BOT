@@ -31,6 +31,50 @@ class AuthManager:
             "Use /only clear to remove filters."
         )
     
+    async def handle_addchannel(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        if not update.message:
+            return
+        
+        user_id = update.message.from_user.id
+        
+        if not self.is_owner(user_id):
+            await update.message.reply_text(
+                "❌ Only the bot owner can authorize channels."
+            )
+            return
+        
+        if not context.args or len(context.args) < 1:
+            await update.message.reply_text(
+                "❌ Please provide a chat ID.\n\n"
+                "Usage: /addchannel <chat_id>\n"
+                "Example: /addchannel -1001234567890"
+            )
+            return
+        
+        try:
+            target_chat_id = int(context.args[0])
+        except ValueError:
+            await update.message.reply_text("❌ Invalid chat ID. It should be a number.")
+            return
+        
+        try:
+            chat = await context.bot.get_chat(target_chat_id)
+            chat_title = chat.title or chat.first_name or "Unknown Chat"
+            
+            self.db.authorize_chat(target_chat_id, chat_title, user_id)
+            await update.message.reply_text(
+                f"✅ Channel/Group authorized!\n\n"
+                f"Chat: {chat_title}\n"
+                f"ID: {target_chat_id}\n\n"
+                "Deals will be sent automatically."
+            )
+        except Exception as e:
+            await update.message.reply_text(
+                f"❌ Failed to authorize channel.\n\n"
+                f"Error: {str(e)}\n\n"
+                "Make sure the bot is added to the channel/group and has posting permissions."
+            )
+    
     async def check_authorization(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
         if not update.message:
             return False

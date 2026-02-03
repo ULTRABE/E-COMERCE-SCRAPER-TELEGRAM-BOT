@@ -11,6 +11,7 @@ from message_formatter import MessageFormatter
 from keyword_manager import KeywordManager
 from welcome_manager import WelcomeManager
 from database import Database
+from proxy_manager import ProxyManager
 
 class DealScheduler:
     def __init__(self, bot: Bot, db: Database):
@@ -19,6 +20,7 @@ class DealScheduler:
         self.scheduler = AsyncIOScheduler()
         self.deal_processor = DealProcessor(db)
         self.keyword_manager = KeywordManager(db)
+        self.proxy_manager = ProxyManager()
         self.is_running = False
     
     async def scrape_and_send_deals(self):
@@ -35,10 +37,13 @@ class DealScheduler:
             for scraper_class in ALL_SCRAPERS:
                 try:
                     scraper = scraper_class()
-                    print(f"Scraping {scraper.site_name}...")
+                    scraper_name = scraper.site_name
+                    proxies = self.proxy_manager.get_proxies_for_scraper(scraper_name, 5)
+                    scraper.set_proxies(proxies)
+                    print(f"Scraping {scraper_name}...")
                     deals = scraper.scrape()
                     all_deals.extend(deals)
-                    print(f"Found {len(deals)} deals from {scraper.site_name}")
+                    print(f"Found {len(deals)} deals from {scraper_name}")
                     await asyncio.sleep(2)
                 except Exception as e:
                     print(f"Error in scraper {scraper_class.__name__}: {e}")
@@ -63,15 +68,39 @@ class DealScheduler:
                     for deal in processed_deals:
                         if self.keyword_manager.matches_keywords(chat_id, deal['product_name']):
                             message = MessageFormatter.format_deal(deal)
+                            image_url = deal.get('image_url', '')
                             
-                            await self.bot.send_message(
-                                chat_id=chat_id,
-                                text=message,
-                                parse_mode=ParseMode.MARKDOWN,
-                                disable_web_page_preview=False
-                            )
-                            sent_count += 1
-                            self.db.increment_stat('deals_sent')
+                            try:
+                                if image_url:
+                                    await self.bot.send_photo(
+                                        chat_id=chat_id,
+                                        photo=image_url,
+                                        caption=message,
+                                        parse_mode=ParseMode.MARKDOWN
+                                    )
+                                else:
+                                    await self.bot.send_message(
+                                        chat_id=chat_id,
+                                        text=message,
+                                        parse_mode=ParseMode.MARKDOWN,
+                                        disable_web_page_preview=False
+                                    )
+                                sent_count += 1
+                                self.db.increment_stat('deals_sent')
+                            except Exception as msg_err:
+                                print(f"Error sending deal message: {msg_err}")
+                                try:
+                                    await self.bot.send_message(
+                                        chat_id=chat_id,
+                                        text=message,
+                                        parse_mode=ParseMode.MARKDOWN,
+                                        disable_web_page_preview=False
+                                    )
+                                    sent_count += 1
+                                    self.db.increment_stat('deals_sent')
+                                except:
+                                    pass
+                            
                             await asyncio.sleep(1)
                     
                     print(f"Sent {sent_count} deals to chat {chat_id}")

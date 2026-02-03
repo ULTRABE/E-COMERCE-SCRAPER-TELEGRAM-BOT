@@ -35,15 +35,17 @@ class MeeshoScraper(BaseScraper):
                         
                         if price > 0 and mrp > price:
                             discount = self.calculate_discount(mrp, price)
+                            image_url = self.extract_image_url(card)
                             
-                            if discount >= 30:  # Only high discount deals
+                            if discount >= 30:
                                 deals.append({
                                     'product_name': name,
                                     'deal_price': int(price),
                                     'original_price': int(mrp),
                                     'discount': discount,
                                     'url': self.base_url,
-                                    'site': self.site_name
+                                    'site': self.site_name,
+                                    'image_url': image_url
                                 })
                 except Exception as e:
                     print(f"Error parsing Meesho product: {e}")
