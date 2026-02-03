@@ -1,0 +1,66 @@
+from .base_scraper import BaseScraper
+from typing import List, Dict
+
+class AjioScraper(BaseScraper):
+    def __init__(self):
+        super().__init__()
+        self.site_name = "AJIO"
+        self.deal_urls = [
+            "https://www.ajio.com/shop/sale",
+        ]
+    
+    def scrape(self) -> List[Dict]:
+        deals = []
+        
+        for url in self.deal_urls:
+            soup = self.get_page(url)
+            if not soup:
+                continue
+            
+            products = soup.find_all('div', class_='item')[:15]
+            
+            for product in products:
+                try:
+                    link = product.find('a', class_='rilrtl-products-list__link')
+                    if not link:
+                        continue
+                    
+                    product_url = 'https://www.ajio.com' + link.get('href', '')
+                    
+                    brand = product.find('div', class_='brand')
+                    name = product.find('div', class_='name')
+                    
+                    if not brand or not name:
+                        continue
+                    
+                    product_name = brand.text.strip() + ' ' + name.text.strip()
+                    
+                    price_elem = product.find('span', class_='price')
+                    original_elem = product.find('span', class_='orginal-price')
+                    discount_elem = product.find('div', class_='discount')
+                    
+                    if not price_elem:
+                        continue
+                    
+                    deal_price = self.extract_price(price_elem.text)
+                    original_price = self.extract_price(original_elem.text) if original_elem else deal_price * 1.5
+                    
+                    if discount_elem:
+                        discount = int(''.join(filter(str.isdigit, discount_elem.text)))
+                    else:
+                        discount = self.calculate_discount(original_price, deal_price)
+                    
+                    if discount >= 40 and deal_price > 0:
+                        deals.append({
+                            'product_name': product_name[:100],
+                            'deal_price': int(deal_price),
+                            'original_price': int(original_price),
+                            'discount': discount,
+                            'url': product_url.split('?')[0],
+                            'site': self.site_name
+                        })
+                except Exception as e:
+                    print(f"Error parsing AJIO product: {e}")
+                    continue
+        
+        return deals[:15]
