@@ -6,7 +6,6 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 ENV_PATH = Path(__file__).resolve().parent / ".env"
-codex/fix-environment-variable-error-lj0ou6
 load_dotenv(dotenv_path=ENV_PATH if ENV_PATH.exists() else None, override=False)
 
 
@@ -21,7 +20,6 @@ def _get_int_env(name: str, default: int = 0) -> int:
 
 
 load_dotenv(dotenv_path=ENV_PATH, override=False)
-codex/fix-environment-variable-error-x33u9y
 
 
 from dotenv import load_dotenv
