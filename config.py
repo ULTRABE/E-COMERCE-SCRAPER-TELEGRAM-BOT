@@ -1,7 +1,29 @@
+"""Configuration values for the Telegram bot."""
+
 import os
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+ENV_PATH = Path(__file__).resolve().parent / ".env"
+if ENV_PATH.exists():
+    load_dotenv(dotenv_path=ENV_PATH, override=False)
+else:
+    load_dotenv(override=False)
+
+
+def _get_int_env(name: str, default: int = 0) -> int:
+    value = os.getenv(name)
+    if value is None or value == "":
+        return default
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
 
 BOT_TOKEN = os.getenv("BOT_TOKEN")
-OWNER_ID = int(os.getenv("OWNER_ID", "0"))
+OWNER_ID = _get_int_env("OWNER_ID", 0)
 CHANNEL_URL = os.getenv("CHANNEL_URL", "")
 
 DATABASE_PATH = "bot_data.db"
