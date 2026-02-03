@@ -9,6 +9,7 @@ from scrapers import ALL_SCRAPERS
 from deal_processor import DealProcessor
 from message_formatter import MessageFormatter
 from keyword_manager import KeywordManager
+from welcome_manager import WelcomeManager
 from database import Database
 
 class DealScheduler:

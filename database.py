@@ -45,7 +45,14 @@ class Database:
                 value INTEGER DEFAULT 0
             )
         ''')
-        
+
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS welcome_messages (
+                chat_id INTEGER PRIMARY KEY,
+                message TEXT
+            )
+        ''')
+
         conn.commit()
         conn.close()
     
@@ -99,6 +106,31 @@ class Database:
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         cursor.execute('DELETE FROM keyword_filters WHERE chat_id = ?', (chat_id,))
+        conn.commit()
+        conn.close()
+    
+    def set_welcome_message(self, chat_id: int, message: str):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute(
+            'INSERT OR REPLACE INTO welcome_messages VALUES (?, ?)',
+            (chat_id, message)
+        )
+        conn.commit()
+        conn.close()
+    
+    def get_welcome_message(self, chat_id: int) -> str:
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('SELECT message FROM welcome_messages WHERE chat_id = ?', (chat_id,))
+        result = cursor.fetchone()
+        conn.close()
+        return result[0] if result else None
+    
+    def clear_welcome_message(self, chat_id: int):
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+        cursor.execute('DELETE FROM welcome_messages WHERE chat_id = ?', (chat_id,))
         conn.commit()
         conn.close()
     
