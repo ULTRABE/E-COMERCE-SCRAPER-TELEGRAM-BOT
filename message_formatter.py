@@ -22,17 +22,25 @@ class MessageFormatter:
         discount = deal.get('discount', 0)
         url = deal.get('url', '')
         site = deal.get('site', 'Unknown')
+        image_url = deal.get('image_url', '')
         
-        # Enhanced deal message with premium emoji support
-        message = f"""{MessageFormatter.EMOJI_DEAL} HOT DEAL {MessageFormatter.EMOJI_DEAL}
+        savings = original_price - deal_price
+        
+        message = f"""{MessageFormatter.EMOJI_FIRE} **HOT DEAL ALERT** {MessageFormatter.EMOJI_FIRE}
 ━━━━━━━━━━━━━━━━━━
-📦 {product_name}
-💰 Deal: ₹{deal_price:,}
-💵 MRP: ₹{original_price:,}
-📉 Save: ₹{original_price - deal_price:,} ({discount}% OFF)
-{MessageFormatter.EMOJI_LINK} {url}
+
+📦 Product: `"{product_name}"`
+
+{MessageFormatter.EMOJI_MONEY} **Price:** `₹{deal_price:,}`
+💵 **MRP:** ~₹{original_price:,}~
+{MessageFormatter.EMOJI_DISCOUNT} **You Save:** `₹{savings:,}` ({discount}% OFF)
+
+{MessageFormatter.EMOJI_STORE} **Store:** {site}
+
+{MessageFormatter.EMOJI_LINK} **Buy Now:** {url}
+
 ━━━━━━━━━━━━━━━━━━
-{MessageFormatter.EMOJI_CART} Buy Now! {MessageFormatter.EMOJI_ROCKET}
+{MessageFormatter.EMOJI_ROCKET} Grab it before it's gone! {MessageFormatter.EMOJI_SPARKLE}
 """
         
         return message

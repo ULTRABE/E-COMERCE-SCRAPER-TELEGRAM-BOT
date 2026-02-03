@@ -50,6 +50,8 @@ class AjioScraper(BaseScraper):
                     else:
                         discount = self.calculate_discount(original_price, deal_price)
                     
+                    image_url = self.extract_image_url(product)
+                    
                     if discount >= 40 and deal_price > 0:
                         deals.append({
                             'product_name': product_name[:100],
@@ -57,7 +59,8 @@ class AjioScraper(BaseScraper):
                             'original_price': int(original_price),
                             'discount': discount,
                             'url': product_url.split('?')[0],
-                            'site': self.site_name
+                            'site': self.site_name,
+                            'image_url': image_url
                         })
                 except Exception as e:
                     print(f"Error parsing AJIO product: {e}")
