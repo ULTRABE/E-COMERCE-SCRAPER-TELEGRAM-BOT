@@ -1,64 +1,61 @@
+from typing import Dict, List
+
 from .base_scraper import BaseScraper
-from typing import List, Dict
+
 
 class FlipkartScraper(BaseScraper):
     def __init__(self):
         super().__init__()
         self.site_name = "Flipkart"
+        self.update_logger()
+        self.base_url = "https://www.flipkart.com"
         self.deal_urls = [
-            "https://www.flipkart.com/offers-list/content?screen=dynamic&pk=themeViews%3DDealoftheDay~widgetType%3DdealOfTheDay~contentType%3Dneo&wid=2.dealOfTheDay.OMU_RHS_DOTD",
+            f"{self.base_url}/offers-store",
+            f"{self.base_url}/offers",
+            f"{self.base_url}/offers-list",
+            self.base_url,
         ]
-    
+        self.card_selectors = [
+            "a._1fQZEK",
+            "a._2rpwqI",
+            "div._2kHMtA a",
+            "div[data-id] a",
+            "div._1AtVbE a",
+        ]
+        self.title_selectors = [
+            "div._4rR01T",
+            "div._2WkVRV",
+            "a._2rpwqI",
+            "div._3wU53n",
+            "div._2B099V",
+        ]
+        self.price_selectors = ["div._30jeq3", "div._1_WHN1", "div._1vC4OE"]
+        self.original_selectors = ["div._3I9_wc", "div._2p6lqe", "div._1s8dld"]
+        self.discount_selectors = ["div._3Ay6sb", "span._3Ay6sb", "div._3LV0nZ"]
+        self.url_selectors = ["a._1fQZEK", "a._2rpwqI", "a"]
+
     def scrape(self) -> List[Dict]:
-        deals = []
-        
-        url = "https://www.flipkart.com/offers-store"
-        soup = self.get_page(url)
+        deals: List[Dict] = []
+        soup, used_url = self.get_page_from_urls(self.deal_urls)
         if not soup:
+            self.logger.error("%s: unable to fetch any deal page", self.site_name)
             return deals
-        
-        deal_items = soup.find_all('a', {'class': '_1fQZEK'})[:15]
-        
-        for item in deal_items:
-            try:
-                product_url = 'https://www.flipkart.com' + item.get('href', '')
-                
-                title_elem = item.find('div', class_='_4rR01T')
-                if not title_elem:
-                    continue
-                
-                product_name = title_elem.text.strip()
-                
-                price_elem = item.find('div', class_='_30jeq3')
-                original_elem = item.find('div', class_='_3I9_wc')
-                discount_elem = item.find('div', class_='_3Ay6sb')
-                
-                if not price_elem:
-                    continue
-                
-                deal_price = self.extract_price(price_elem.text)
-                original_price = self.extract_price(original_elem.text) if original_elem else deal_price * 1.4
-                
-                if discount_elem:
-                    discount_text = discount_elem.text.strip()
-                    discount = int(''.join(filter(str.isdigit, discount_text)))
-                else:
-                    discount = self.calculate_discount(original_price, deal_price)
-                
-                image_url = self.extract_image_url(item)
-                
-                if discount >= 30 and deal_price > 0:
-                    deals.append({
-                        'product_name': product_name,
-                        'deal_price': int(deal_price),
-                        'original_price': int(original_price),
-                        'discount': discount,
-                        'url': product_url.split('?')[0],
-                        'site': self.site_name,
-                        'image_url': image_url
-                    })
-            except Exception as e:
-                print(f"Error parsing Flipkart deal: {e}")
-                continue
-        
+
+        cards = self.select_all(soup, self.card_selectors)
+        self.logger.info("%s: found %s cards from %s", self.site_name, len(cards), used_url)
+
+        for card in cards[:40]:
+            deal = self.build_deal(
+                card,
+                self.base_url,
+                self.title_selectors,
+                self.price_selectors,
+                self.url_selectors,
+                self.original_selectors,
+                self.discount_selectors,
+            )
+            if deal:
+                deals.append(deal)
+
+        self.logger.info("%s: parsed %s deals", self.site_name, len(deals))
         return deals[:15]

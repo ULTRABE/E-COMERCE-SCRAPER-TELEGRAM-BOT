@@ -1,73 +1,63 @@
+from typing import Dict, List
+
 from .base_scraper import BaseScraper
-from typing import List, Dict
+
 
 class MyntraScraper(BaseScraper):
     def __init__(self):
         super().__init__()
         self.site_name = "Myntra"
-        self.categories = [
-            "https://www.myntra.com/men-tshirts",
-            "https://www.myntra.com/women-kurtas-kurtis-suits",
-            "https://www.myntra.com/sports-shoes",
+        self.update_logger()
+        self.base_url = "https://www.myntra.com"
+        self.deal_urls = [
+            f"{self.base_url}/sale",
+            f"{self.base_url}/end-of-season-sale",
+            f"{self.base_url}/new-arrivals",
+            self.base_url,
         ]
-    
+        self.card_selectors = [
+            "li.product-base",
+            "div.product-base",
+            "div.product-productMetaInfo",
+            "a[href*='/']",
+        ]
+        self.title_selectors = [
+            "h3.product-brand",
+            "h4.product-product",
+            "div.product-productMetaInfo h3",
+            "div.product-productMetaInfo h4",
+        ]
+        self.price_selectors = [
+            "span.product-discountedPrice",
+            "span.product-price",
+            "div.product-price",
+        ]
+        self.original_selectors = ["span.product-strike", "span.product-original-price"]
+        self.discount_selectors = ["span.product-discountPercentage", "span.product-discount"]
+        self.url_selectors = ["a[href]", "a"]
+
     def scrape(self) -> List[Dict]:
-        deals = []
-        
-        for url in self.categories:
-            soup = self.get_page(url)
-            if not soup:
-                continue
-            
-            products = soup.find_all('li', class_='product-base')[:5]
-            
-            for product in products:
-                try:
-                    link = product.find('a')
-                    if not link:
-                        continue
-                    
-                    product_url = 'https://www.myntra.com/' + link.get('href', '')
-                    
-                    title = product.find('h3', class_='product-brand')
-                    subtitle = product.find('h4', class_='product-product')
-                    
-                    if not title:
-                        continue
-                    
-                    product_name = title.text.strip()
-                    if subtitle:
-                        product_name += ' ' + subtitle.text.strip()
-                    
-                    price_elem = product.find('span', class_='product-discountedPrice')
-                    original_elem = product.find('span', class_='product-strike')
-                    discount_elem = product.find('span', class_='product-discountPercentage')
-                    
-                    if not price_elem:
-                        continue
-                    
-                    deal_price = self.extract_price(price_elem.text)
-                    original_price = self.extract_price(original_elem.text) if original_elem else deal_price * 1.5
-                    
-                    if discount_elem:
-                        discount = int(''.join(filter(str.isdigit, discount_elem.text)))
-                    else:
-                        discount = self.calculate_discount(original_price, deal_price)
-                    
-                    image_url = self.extract_image_url(product)
-                    
-                    if discount >= 40 and deal_price > 0:
-                        deals.append({
-                            'product_name': product_name[:100],
-                            'deal_price': int(deal_price),
-                            'original_price': int(original_price),
-                            'discount': discount,
-                            'url': product_url.split('?')[0],
-                            'site': self.site_name,
-                            'image_url': image_url
-                        })
-                except Exception as e:
-                    print(f"Error parsing Myntra product: {e}")
-                    continue
-        
+        deals: List[Dict] = []
+        soup, used_url = self.get_page_from_urls(self.deal_urls)
+        if not soup:
+            self.logger.error("%s: unable to fetch any deal page", self.site_name)
+            return deals
+
+        cards = self.select_all(soup, self.card_selectors)
+        self.logger.info("%s: found %s cards from %s", self.site_name, len(cards), used_url)
+
+        for card in cards[:40]:
+            deal = self.build_deal(
+                card,
+                self.base_url,
+                self.title_selectors,
+                self.price_selectors,
+                self.url_selectors,
+                self.original_selectors,
+                self.discount_selectors,
+            )
+            if deal:
+                deals.append(deal)
+
+        self.logger.info("%s: parsed %s deals", self.site_name, len(deals))
         return deals[:15]

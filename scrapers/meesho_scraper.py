@@ -1,57 +1,62 @@
+from typing import Dict, List
+
 from .base_scraper import BaseScraper
-from typing import List, Dict
-import re
+
 
 class MeeshoScraper(BaseScraper):
     def __init__(self):
         super().__init__()
         self.site_name = "Meesho"
+        self.update_logger()
         self.base_url = "https://www.meesho.com"
-    
+        self.deal_urls = [
+            f"{self.base_url}/offers",
+            f"{self.base_url}/deals",
+            self.base_url,
+        ]
+        self.card_selectors = [
+            "div[data-testid='product-card']",
+            "a[href*='/product/']",
+            "div[class*='ProductCard']",
+            "div[class*='ProductList'] a",
+        ]
+        self.title_selectors = [
+            "p[class*='ProductTitle']",
+            "p[class*='Text__StyledText']",
+            "div[class*='product-title']",
+            "h3",
+        ]
+        self.price_selectors = [
+            "span[class*='ProductPrice']",
+            "h5",
+            "span[class*='price']",
+        ]
+        self.original_selectors = ["span[class*='strike']", "span[class*='Original']", "span[class*='mrp']"]
+        self.discount_selectors = ["span[class*='discount']", "span[class*='off']"]
+        self.url_selectors = ["a[href*='/product/']", "a"]
+
     def scrape(self) -> List[Dict]:
-        deals = []
-        
-        try:
-            # Meesho deals page
-            url = "https://www.meesho.com/best-deals"
-            soup = self.get_page(url)
-            
-            if not soup:
-                return deals
-            
-            # Find product cards
-            product_cards = soup.find_all('div', class_='ProductCard__ProductCardWrapper-sc-1f2b5a-0')
-            
-            for card in product_cards[:10]:  # Limit to 10 deals
-                try:
-                    product_name = card.find('p', class_='ProductCard__ProductName-sc-1f2b5a-1')
-                    deal_price = card.find('p', class_='ProductCard__ProductPrice-sc-1f2b5a-2')
-                    original_price = card.find('p', class_='ProductCard__ProductMRP-sc-1f2b5a-3')
-                    
-                    if product_name and deal_price:
-                        name = product_name.text.strip()
-                        price = self.extract_price(deal_price.text)
-                        mrp = self.extract_price(original_price.text) if original_price else price * 1.5  # Estimate
-                        
-                        if price > 0 and mrp > price:
-                            discount = self.calculate_discount(mrp, price)
-                            image_url = self.extract_image_url(card)
-                            
-                            if discount >= 30:
-                                deals.append({
-                                    'product_name': name,
-                                    'deal_price': int(price),
-                                    'original_price': int(mrp),
-                                    'discount': discount,
-                                    'url': self.base_url,
-                                    'site': self.site_name,
-                                    'image_url': image_url
-                                })
-                except Exception as e:
-                    print(f"Error parsing Meesho product: {e}")
-                    continue
-                    
-        except Exception as e:
-            print(f"Error in Meesho scraper: {e}")
-        
-        return deals
+        deals: List[Dict] = []
+        soup, used_url = self.get_page_from_urls(self.deal_urls)
+        if not soup:
+            self.logger.error("%s: unable to fetch any deal page", self.site_name)
+            return deals
+
+        cards = self.select_all(soup, self.card_selectors)
+        self.logger.info("%s: found %s cards from %s", self.site_name, len(cards), used_url)
+
+        for card in cards[:40]:
+            deal = self.build_deal(
+                card,
+                self.base_url,
+                self.title_selectors,
+                self.price_selectors,
+                self.url_selectors,
+                self.original_selectors,
+                self.discount_selectors,
+            )
+            if deal:
+                deals.append(deal)
+
+        self.logger.info("%s: parsed %s deals", self.site_name, len(deals))
+        return deals[:15]
