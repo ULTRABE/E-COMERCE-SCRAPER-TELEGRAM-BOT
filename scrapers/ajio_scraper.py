@@ -1,69 +1,65 @@
+from typing import Dict, List
+
 from .base_scraper import BaseScraper
-from typing import List, Dict
+
 
 class AjioScraper(BaseScraper):
     def __init__(self):
         super().__init__()
         self.site_name = "AJIO"
+        self.update_logger()
+        self.base_url = "https://www.ajio.com"
         self.deal_urls = [
-            "https://www.ajio.com/shop/sale",
+            f"{self.base_url}/sale",
+            f"{self.base_url}/deals",
+            f"{self.base_url}/end-of-season-sale",
+            self.base_url,
         ]
-    
+        self.card_selectors = [
+            "div.item",
+            "div.product-listing",
+            "div[class*='item']",
+            "a[href*='/p/']",
+        ]
+        self.title_selectors = [
+            "div.nameCls",
+            "div.brand",
+            "div.name",
+            "span.name",
+            "div[class*='name']",
+        ]
+        self.price_selectors = [
+            "span.price",
+            "div.price",
+            "span.offer-price",
+            "div[class*='price']",
+        ]
+        self.original_selectors = ["span.orginal-price", "span.original-price", "span.old-price"]
+        self.discount_selectors = ["span.discount", "span.offer", "span[class*='off']"]
+        self.url_selectors = ["a[href*='/p/']", "a"]
+
     def scrape(self) -> List[Dict]:
-        deals = []
-        
-        for url in self.deal_urls:
-            soup = self.get_page(url)
-            if not soup:
-                continue
-            
-            products = soup.find_all('div', class_='item')[:15]
-            
-            for product in products:
-                try:
-                    link = product.find('a', class_='rilrtl-products-list__link')
-                    if not link:
-                        continue
-                    
-                    product_url = 'https://www.ajio.com' + link.get('href', '')
-                    
-                    brand = product.find('div', class_='brand')
-                    name = product.find('div', class_='name')
-                    
-                    if not brand or not name:
-                        continue
-                    
-                    product_name = brand.text.strip() + ' ' + name.text.strip()
-                    
-                    price_elem = product.find('span', class_='price')
-                    original_elem = product.find('span', class_='orginal-price')
-                    discount_elem = product.find('div', class_='discount')
-                    
-                    if not price_elem:
-                        continue
-                    
-                    deal_price = self.extract_price(price_elem.text)
-                    original_price = self.extract_price(original_elem.text) if original_elem else deal_price * 1.5
-                    
-                    if discount_elem:
-                        discount = int(''.join(filter(str.isdigit, discount_elem.text)))
-                    else:
-                        discount = self.calculate_discount(original_price, deal_price)
-                    
-                    image_url = self.extract_image_url(product)
-                    
-                    if discount >= 40 and deal_price > 0:
-                        deals.append({
-                            'product_name': product_name[:100],
-                            'deal_price': int(deal_price),
-                            'original_price': int(original_price),
-                            'discount': discount,
-                            'url': product_url.split('?')[0],
-                            'site': self.site_name,
-                            'image_url': image_url
-                        })
-                except Exception as e:
-                    print(f"Error parsing AJIO product: {e}")
-                    continue
-        
+        deals: List[Dict] = []
+        soup, used_url = self.get_page_from_urls(self.deal_urls)
+        if not soup:
+            self.logger.error("%s: unable to fetch any deal page", self.site_name)
+            return deals
+
+        cards = self.select_all(soup, self.card_selectors)
+        self.logger.info("%s: found %s cards from %s", self.site_name, len(cards), used_url)
+
+        for card in cards[:40]:
+            deal = self.build_deal(
+                card,
+                self.base_url,
+                self.title_selectors,
+                self.price_selectors,
+                self.url_selectors,
+                self.original_selectors,
+                self.discount_selectors,
+            )
+            if deal:
+                deals.append(deal)
+
+        self.logger.info("%s: parsed %s deals", self.site_name, len(deals))
         return deals[:15]

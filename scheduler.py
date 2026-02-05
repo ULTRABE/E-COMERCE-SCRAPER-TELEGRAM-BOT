@@ -1,17 +1,19 @@
+import asyncio
+import logging
+
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 from telegram import Bot
 from telegram.constants import ParseMode
-from typing import List
-import asyncio
+
 import config
-from scrapers import ALL_SCRAPERS
-from deal_processor import DealProcessor
-from message_formatter import MessageFormatter
-from keyword_manager import KeywordManager
-from welcome_manager import WelcomeManager
 from database import Database
+from deal_processor import DealProcessor
+from keyword_manager import KeywordManager
+from message_formatter import MessageFormatter
 from proxy_manager import ProxyManager
+from scrapers import ALL_SCRAPERS
+
 
 class DealScheduler:
     def __init__(self, bot: Bot, db: Database):
@@ -22,112 +24,122 @@ class DealScheduler:
         self.keyword_manager = KeywordManager(db)
         self.proxy_manager = ProxyManager()
         self.is_running = False
-    
+        self.logger = logging.getLogger(self.__class__.__name__)
+
     async def scrape_and_send_deals(self):
         if self.is_running:
-            print("Previous scraping still in progress, skipping...")
+            self.logger.warning("Previous scraping still in progress, skipping...")
             return
-        
+
         self.is_running = True
-        print("Starting deal scraping...")
-        
+        self.logger.info("Starting deal scraping...")
+
         try:
             all_deals = []
-            
+            scrape_summary = {}
+
             for scraper_class in ALL_SCRAPERS:
+                scraper = None
                 try:
                     scraper = scraper_class()
                     scraper_name = scraper.site_name
+                    scraper.set_proxy_manager(self.proxy_manager)
                     proxies = self.proxy_manager.get_proxies_for_scraper(scraper_name, 5)
                     scraper.set_proxies(proxies)
-                    print(f"Scraping {scraper_name}...")
+                    self.logger.info(
+                        "Scraping %s with %s proxies",
+                        scraper_name,
+                        len(proxies),
+                    )
                     deals = scraper.scrape()
                     all_deals.extend(deals)
-                    print(f"Found {len(deals)} deals from {scraper_name}")
+                    scrape_summary[scraper_name] = len(deals)
+                    self.logger.info("Found %s deals from %s", len(deals), scraper_name)
                     await asyncio.sleep(2)
-                except Exception as e:
-                    print(f"Error in scraper {scraper_class.__name__}: {e}")
+                except Exception as exc:
+                    scraper_name = scraper.site_name if scraper else scraper_class.__name__
+                    scrape_summary[scraper_name] = 0
+                    self.logger.exception("Error in scraper %s: %s", scraper_name, exc)
                     continue
-            
-            print(f"Total deals scraped: {len(all_deals)}")
-            
+
+            self.logger.info("Scrape summary: %s", scrape_summary)
+            self.logger.info("Total deals scraped: %s", len(all_deals))
+
             processed_deals = self.deal_processor.process_deals(all_deals)
-            print(f"Unique deals after processing: {len(processed_deals)}")
-            
+            self.logger.info("Unique deals after processing: %s", len(processed_deals))
+
             if not processed_deals:
-                print("No new deals to send")
-                self.is_running = False
+                self.logger.warning("No new deals to send")
                 return
-            
+
             authorized_chats = self.db.get_authorized_chats()
-            print(f"Sending to {len(authorized_chats)} authorized chats")
-            
+            self.logger.info("Sending to %s authorized chats", len(authorized_chats))
+
             for chat_id in authorized_chats:
                 try:
                     sent_count = 0
                     for deal in processed_deals:
-                        if self.keyword_manager.matches_keywords(chat_id, deal['product_name']):
+                        if self.keyword_manager.matches_keywords(chat_id, deal["product_name"]):
                             message = MessageFormatter.format_deal(deal)
-                            image_url = deal.get('image_url', '')
-                            
+                            image_url = deal.get("image_url", "")
+
                             try:
                                 if image_url:
                                     await self.bot.send_photo(
                                         chat_id=chat_id,
                                         photo=image_url,
                                         caption=message,
-                                        parse_mode=ParseMode.MARKDOWN
+                                        parse_mode=ParseMode.MARKDOWN,
                                     )
                                 else:
                                     await self.bot.send_message(
                                         chat_id=chat_id,
                                         text=message,
                                         parse_mode=ParseMode.MARKDOWN,
-                                        disable_web_page_preview=False
+                                        disable_web_page_preview=False,
                                     )
                                 sent_count += 1
-                                self.db.increment_stat('deals_sent')
+                                self.db.increment_stat("deals_sent")
                             except Exception as msg_err:
-                                print(f"Error sending deal message: {msg_err}")
+                                self.logger.warning("Error sending deal message: %s", msg_err)
                                 try:
                                     await self.bot.send_message(
                                         chat_id=chat_id,
                                         text=message,
                                         parse_mode=ParseMode.MARKDOWN,
-                                        disable_web_page_preview=False
+                                        disable_web_page_preview=False,
                                     )
                                     sent_count += 1
-                                    self.db.increment_stat('deals_sent')
-                                except:
-                                    pass
-                            
+                                    self.db.increment_stat("deals_sent")
+                                except Exception:
+                                    self.logger.exception("Failed to send fallback message")
+
                             await asyncio.sleep(1)
-                    
-                    print(f"Sent {sent_count} deals to chat {chat_id}")
-                except Exception as e:
-                    print(f"Error sending to chat {chat_id}: {e}")
+
+                    self.logger.info("Sent %s deals to chat %s", sent_count, chat_id)
+                except Exception as exc:
+                    self.logger.exception("Error sending to chat %s: %s", chat_id, exc)
                     continue
-            
+
             self.db.cleanup_old_deals(7)
-            
-        except Exception as e:
-            print(f"Error in scrape_and_send_deals: {e}")
+        except Exception as exc:
+            self.logger.exception("Error in scrape_and_send_deals: %s", exc)
         finally:
             self.is_running = False
-            print("Scraping complete")
-    
+            self.logger.info("Scraping complete")
+
     def start(self):
         self.scheduler.add_job(
             self.scrape_and_send_deals,
             trigger=IntervalTrigger(minutes=config.SCRAPE_INTERVAL),
-            id='deal_scraper',
-            name='Scrape and send deals',
-            replace_existing=True
+            id="deal_scraper",
+            name="Scrape and send deals",
+            replace_existing=True,
         )
-        
+
         self.scheduler.start()
-        print(f"Scheduler started - scraping every {config.SCRAPE_INTERVAL} minutes")
-    
+        self.logger.info("Scheduler started - scraping every %s minutes", config.SCRAPE_INTERVAL)
+
     def stop(self):
         self.scheduler.shutdown()
-        print("Scheduler stopped")
+        self.logger.info("Scheduler stopped")
