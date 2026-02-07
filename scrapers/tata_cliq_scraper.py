@@ -1,57 +1,64 @@
+from typing import Dict, List
+
 from .base_scraper import BaseScraper
-from typing import List, Dict
-import re
+
 
 class TataCliqScraper(BaseScraper):
     def __init__(self):
         super().__init__()
         self.site_name = "Tata CLIQ"
+        self.update_logger()
         self.base_url = "https://www.tatacliq.com"
-    
+        self.deal_urls = [
+            f"{self.base_url}/c/food-offers",
+            f"{self.base_url}/c/electronics-offers",
+            f"{self.base_url}/offers",
+            self.base_url,
+        ]
+        self.card_selectors = [
+            "div.ProductModule__base",
+            "div.product-tile",
+            "div[role='listitem']",
+            "a[href*='/p-']",
+        ]
+        self.title_selectors = [
+            "div.ProductDescription__name",
+            "h3",
+            "div.product-title",
+            "span.product-name",
+        ]
+        self.price_selectors = [
+            "div.ProductDescription__price",
+            "div.ProductDescription__discountedPrice",
+            "span.product-price",
+            "span.price",
+        ]
+        self.original_selectors = ["div.ProductDescription__price", "span.old-price", "span.mrp"]
+        self.discount_selectors = ["div.ProductDescription__discount", "span.discount"]
+        self.url_selectors = ["a[href*='/p-']", "a"]
+
     def scrape(self) -> List[Dict]:
-        deals = []
-        
-        try:
-            # Tata CLIQ deals page
-            url = "https://www.tatacliq.com/offers"
-            soup = self.get_page(url)
-            
-            if not soup:
-                return deals
-            
-            # Find product cards
-            product_cards = soup.find_all('div', class_='ProductCard')
-            
-            for card in product_cards[:10]:  # Limit to 10 deals
-                try:
-                    product_name = card.find('div', class_='ProductCard__name')
-                    deal_price = card.find('div', class_='ProductCard__price')
-                    original_price = card.find('div', class_='ProductCard__mrp')
-                    
-                    if product_name and deal_price:
-                        name = product_name.text.strip()
-                        price = self.extract_price(deal_price.text)
-                        mrp = self.extract_price(original_price.text) if original_price else price * 1.4  # Estimate
-                        
-                        if price > 0 and mrp > price:
-                            discount = self.calculate_discount(mrp, price)
-                            image_url = self.extract_image_url(card)
-                            
-                            if discount >= 30:
-                                deals.append({
-                                    'product_name': name,
-                                    'deal_price': int(price),
-                                    'original_price': int(mrp),
-                                    'discount': discount,
-                                    'url': self.base_url,
-                                    'site': self.site_name,
-                                    'image_url': image_url
-                                })
-                except Exception as e:
-                    print(f"Error parsing Tata CLIQ product: {e}")
-                    continue
-                    
-        except Exception as e:
-            print(f"Error in Tata CLIQ scraper: {e}")
-        
-        return deals
+        deals: List[Dict] = []
+        soup, used_url = self.get_page_from_urls(self.deal_urls)
+        if not soup:
+            self.logger.error("%s: unable to fetch any deal page", self.site_name)
+            return deals
+
+        cards = self.select_all(soup, self.card_selectors)
+        self.logger.info("%s: found %s cards from %s", self.site_name, len(cards), used_url)
+
+        for card in cards[:40]:
+            deal = self.build_deal(
+                card,
+                self.base_url,
+                self.title_selectors,
+                self.price_selectors,
+                self.url_selectors,
+                self.original_selectors,
+                self.discount_selectors,
+            )
+            if deal:
+                deals.append(deal)
+
+        self.logger.info("%s: parsed %s deals", self.site_name, len(deals))
+        return deals[:15]

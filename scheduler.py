@@ -36,7 +36,7 @@ class DealScheduler:
 
     async def scrape_and_send_deals(self):
         if self.is_running:
-            print("Previous scraping still in progress, skipping...")
+            self.logger.warning("Previous scraping still in progress, skipping...")
             return
 
         self.is_running = True
@@ -138,4 +138,4 @@ class DealScheduler:
 
     def stop(self):
         self.scheduler.shutdown()
-        print("Scheduler stopped")
+        self.logger.info("Scheduler stopped")

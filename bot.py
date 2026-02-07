@@ -11,18 +11,16 @@ from keyword_manager import KeywordManager
 from scheduler import DealScheduler
 from welcome_manager import WelcomeManager
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s - %(message)s",
+)
+logger = logging.getLogger("deal-bot")
 
 db = Database()
 auth_manager = AuthManager(db)
 keyword_manager = KeywordManager(db)
 welcome_manager = WelcomeManager(db)
-
-
-logging.basicConfig(
-    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
-    level=logging.INFO,
-)
-logger = logging.getLogger(__name__)
 
 
 def _channel_markup():
@@ -45,6 +43,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(welcome_message, reply_markup=_channel_markup(), disable_web_page_preview=True)
 
 
+
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
@@ -61,6 +60,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "`\"/welcome <message>\"` → `Owner welcome template`"
     )
     await update.message.reply_text(help_message, reply_markup=_channel_markup(), disable_web_page_preview=True)
+
 
 
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -149,6 +149,7 @@ async def post_init(application: Application):
 
 
 def main():
+    print("Starting Indian E-commerce Deal Bot...")
     logger.info("Starting Indian E-commerce Deal Bot...")
 
     if not config.BOT_TOKEN:
@@ -171,8 +172,11 @@ def main():
     application.add_handler(CommandHandler("scrapenow", scrapenow_command))
     application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, handle_new_chat_members))
 
+    print("Bot started successfully!")
+    print(f"Scraping interval: {config.SCRAPE_INTERVAL_SECONDS} seconds")
+    print(f"Owner ID: {config.OWNER_ID}")
     logger.info("Bot started successfully!")
-    logger.info("Scraping interval: %s seconds", config.SCRAPE_INTERVAL_SECONDS)
+    logger.info("Scraping interval: %s minutes", config.SCRAPE_INTERVAL)
     logger.info("Owner ID: %s", config.OWNER_ID)
 
     application.run_polling(allowed_updates=Update.ALL_TYPES)

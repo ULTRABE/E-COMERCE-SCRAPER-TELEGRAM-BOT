@@ -1,65 +1,65 @@
+from typing import Dict, List
+
 from .base_scraper import BaseScraper
-from typing import List, Dict
+
 
 class CromaScraper(BaseScraper):
     def __init__(self):
         super().__init__()
         self.site_name = "Croma"
+        self.update_logger()
+        self.base_url = "https://www.croma.com"
         self.deal_urls = [
-            "https://www.croma.com/deals-of-the-day",
+            f"{self.base_url}/c/offers",
+            f"{self.base_url}/offers",
+            f"{self.base_url}/promotions",
+            self.base_url,
         ]
-    
+        self.card_selectors = [
+            "li.product-item",
+            "div.product",
+            "div.product__list",
+            "div[data-testid='product']",
+            "a[href*='/p/']",
+        ]
+        self.title_selectors = [
+            "h3",
+            "h2",
+            "div.product-title",
+            "div.product__title",
+        ]
+        self.price_selectors = [
+            "span.amount",
+            "span.new-price",
+            "span.price",
+            "div.product__price span",
+        ]
+        self.original_selectors = ["span.mrp", "span.old-price", "span.strike"]
+        self.discount_selectors = ["span.discount", "span[class*='off']"]
+        self.url_selectors = ["a[href*='/p/']", "a"]
+
     def scrape(self) -> List[Dict]:
-        deals = []
-        
-        for url in self.deal_urls:
-            soup = self.get_page(url)
-            if not soup:
-                continue
-            
-            products = soup.find_all('li', class_='product')[:15]
-            
-            for product in products:
-                try:
-                    link = product.find('a', class_='product-link')
-                    if not link:
-                        continue
-                    
-                    product_url = link.get('href', '')
-                    if not product_url.startswith('http'):
-                        product_url = 'https://www.croma.com' + product_url
-                    
-                    title = product.find('h3', class_='product-title')
-                    if not title:
-                        continue
-                    
-                    product_name = title.text.strip()
-                    
-                    price_elem = product.find('span', class_='amount')
-                    original_elem = product.find('span', class_='old-price')
-                    
-                    if not price_elem:
-                        continue
-                    
-                    deal_price = self.extract_price(price_elem.text)
-                    original_price = self.extract_price(original_elem.text) if original_elem else deal_price * 1.25
-                    
-                    discount = self.calculate_discount(original_price, deal_price)
-                    
-                    image_url = self.extract_image_url(product)
-                    
-                    if discount >= 15 and deal_price > 0:
-                        deals.append({
-                            'product_name': product_name[:100],
-                            'deal_price': int(deal_price),
-                            'original_price': int(original_price),
-                            'discount': discount,
-                            'url': product_url.split('?')[0],
-                            'site': self.site_name,
-                            'image_url': image_url
-                        })
-                except Exception as e:
-                    print(f"Error parsing Croma product: {e}")
-                    continue
-        
+        deals: List[Dict] = []
+        soup, used_url = self.get_page_from_urls(self.deal_urls)
+        if not soup:
+            self.logger.error("%s: unable to fetch any deal page", self.site_name)
+            return deals
+
+        cards = self.select_all(soup, self.card_selectors)
+        self.logger.info("%s: found %s cards from %s", self.site_name, len(cards), used_url)
+
+        for card in cards[:40]:
+            deal = self.build_deal(
+                card,
+                self.base_url,
+                self.title_selectors,
+                self.price_selectors,
+                self.url_selectors,
+                self.original_selectors,
+                self.discount_selectors,
+            )
+            if deal:
+                deals.append(deal)
+
+        self.logger.info("%s: parsed %s deals", self.site_name, len(deals))
         return deals[:15]
