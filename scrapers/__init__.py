@@ -1,27 +1,9 @@
 from .amazon_scraper import AmazonScraper
 from .flipkart_scraper import FlipkartScraper
-from .myntra_scraper import MyntraScraper
-from .ajio_scraper import AjioScraper
-from .snapdeal_scraper import SnapdealScraper
-from .shopclues_scraper import ShopcluesScraper
-from .croma_scraper import CromaScraper
-from .vijaysales_scraper import VijaysalesScraper
-from .meesho_scraper import MeeshoScraper
-from .tata_cliq_scraper import TataCliqScraper
-from .nykaa_scraper import NykaaScraper
-from .lenskart_scraper import LenskartScraper
+from .jiomart_scraper import JioMartScraper
 
 ALL_SCRAPERS = [
     AmazonScraper,
     FlipkartScraper,
-    MyntraScraper,
-    AjioScraper,
-    SnapdealScraper,
-    ShopcluesScraper,
-    CromaScraper,
-    VijaysalesScraper,
-    MeeshoScraper,
-    TataCliqScraper,
-    NykaaScraper,
-    LenskartScraper,
+    JioMartScraper,
 ]
