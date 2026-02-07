@@ -1,4 +1,4 @@
-import logging
+import asyncio
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
@@ -22,96 +22,44 @@ keyword_manager = KeywordManager(db)
 welcome_manager = WelcomeManager(db)
 
 
+def _channel_markup():
+    if not config.CHANNEL_URL:
+        return None
+    return InlineKeyboardMarkup([[InlineKeyboardButton(config.CHANNEL_BUTTON_TEXT, url=config.CHANNEL_URL)]])
+
+
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
 
-    user_id = update.message.from_user.id
-    is_owner = auth_manager.is_owner(user_id)
+    welcome_message = (
+        "✨ `\"INDIA DEALS PRO\"` ✨\n\n"
+        "`\"Stores\"` → `Amazon` | `Flipkart` | `JioMart`\n"
+        "`\"Mode\"` → `Live price-drop tracking`\n"
+        "`\"Commands\"` → `/help` `/only` `/stats` `/welcome`\n"
+        "`\"Tip\"` → `Use /only to track your niche products`"
+    )
+    await update.message.reply_text(welcome_message, reply_markup=_channel_markup(), disable_web_page_preview=True)
 
-    welcome_message = """
-🛍️ **Welcome to Indian E-commerce Deal Bot!**
-
-I automatically scrape deals from 12+ major Indian e-commerce sites and send them to authorized groups/channels.
-
-**Commands:**
-/start - Show this message
-/help - Get help
-/auth - (Owner only) Authorize bot in this group
-/addchannel <chat_id> - (Owner only) Authorize channel by ID
-/only <keywords> - (Owner only) Filter deals by keywords
-/only clear - (Owner only) Clear keyword filters
-/stats - (Owner only) Show bot statistics
-/welcome <message> - (Owner only) Set custom welcome message
-/welcome default - Reset to default welcome
-
-**How it works:**
-1. Bot must be authorized by owner using /auth
-2. Deals are automatically scraped every 3 minutes
-3. Only fresh, high-discount deals are sent
-4. Use /only to filter deals by your interests
-5. New members get welcome messages automatically
-
-**Sites covered:**
-Amazon, Flipkart, Myntra, AJIO, Snapdeal, ShopClues, Croma, Vijay Sales, Meesho, Tata CLIQ, Nykaa, Lenskart
-"""
-
-    if not is_owner and config.CHANNEL_URL:
-        keyboard = [[InlineKeyboardButton("🚀 JOIN CHANNEL", url=config.CHANNEL_URL)]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text(welcome_message, reply_markup=reply_markup)
-    else:
-        await update.message.reply_text(welcome_message)
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
 
-    user_id = update.message.from_user.id
-    is_owner = auth_manager.is_owner(user_id)
+    help_message = (
+        "📚 `\"COMMANDS\"`\n"
+        "`\"/start\"` → `Bot intro`\n"
+        "`\"/help\"` → `Commands list`\n"
+        "`\"/auth\"` → `Owner authorize chat`\n"
+        "`\"/addchannel <id>\"` → `Owner authorize channel`\n"
+        "`\"/only <keywords>\"` → `Keyword filter`\n"
+        "`\"/only clear\"` → `Clear filter`\n"
+        "`\"/stats\"` → `Owner stats`\n"
+        "`\"/welcome <message>\"` → `Owner welcome template`"
+    )
+    await update.message.reply_text(help_message, reply_markup=_channel_markup(), disable_web_page_preview=True)
 
-    help_message = """
-📚 **Help & Commands**
-
-**Authorization:**
-- Bot works only in authorized groups/channels
-- Only the bot owner can authorize using /auth or /addchannel
-- Once authorized, deals will be sent automatically
-
-**Filtering Deals:**
-- Use `/only shoes iPhone laptop` to only receive deals matching these keywords
-- Use `/only clear` to remove filters and get all deals
-- Keywords are case-insensitive
-- (Owner only)
-
-**Welcome Messages:**
-- New members automatically receive welcome messages
-- Owner can customize welcome message with `/welcome <message>`
-- Use `{username}` and `{group_name}` as placeholders
-- Reset with `/welcome default`
-
-**Examples:**
-- `/only smartphone` - Only phone deals
-- `/only shoes sneakers` - Footwear deals
-- `/only laptop electronics` - Tech deals
-- `/welcome Hello {username}! Welcome to {group_name}!` - Custom welcome
-
-**Automatic Scraping:**
-- Runs every 3 minutes
-- Covers 12+ major e-commerce sites
-- Only sends new deals (no duplicates)
-- Minimum 30% discount filter
-
-Need help? Contact the bot owner.
-"""
-
-    if not is_owner and config.CHANNEL_URL:
-        keyboard = [[InlineKeyboardButton("🚀 JOIN CHANNEL", url=config.CHANNEL_URL)]]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-        await update.message.reply_text(help_message, reply_markup=reply_markup)
-    else:
-        await update.message.reply_text(help_message)
 
 
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -119,32 +67,20 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     user_id = update.message.from_user.id
-
     if not auth_manager.is_owner(user_id):
-        if config.CHANNEL_URL:
-            keyboard = [[InlineKeyboardButton("🚀 JOIN CHANNEL", url=config.CHANNEL_URL)]]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-            await update.message.reply_text(
-                "❌ Only the bot owner can view statistics.",
-                reply_markup=reply_markup,
-            )
-        else:
-            await update.message.reply_text("❌ Only the bot owner can view statistics.")
+        await update.message.reply_text("❌ `\"Owner only command\"`", reply_markup=_channel_markup())
         return
 
     total_deals = db.get_stat("deals_sent")
     authorized_chats = len(db.get_authorized_chats())
 
-    stats_message = f"""
-📊 **Bot Statistics**
-
-🎯 Total deals sent: {total_deals:,}
-👥 Authorized chats: {authorized_chats}
-⏰ Scrape interval: {config.SCRAPE_INTERVAL} minutes
-🛒 Sites monitored: 12
-
-Bot is running and active! 🚀
-"""
+    stats_message = (
+        "📊 `\"BOT STATS\"`\n"
+        f"`\"Deals sent\"` → `{total_deals:,}`\n"
+        f"`\"Authorized chats\"` → `{authorized_chats}`\n"
+        f"`\"Interval(sec)\"` → `{config.SCRAPE_INTERVAL_SECONDS}`\n"
+        f"`\"Min discount\"` → `{config.MIN_DISCOUNT}%`"
+    )
     await update.message.reply_text(stats_message)
 
 
@@ -161,9 +97,8 @@ async def only_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     user_id = update.message.from_user.id
-
     if not auth_manager.is_owner(user_id):
-        await update.message.reply_text("❌ Only the bot owner can manage keyword filters.")
+        await update.message.reply_text("❌ `\"Owner only command\"`")
         return
 
     if not await auth_manager.check_authorization(update, context):
@@ -176,6 +111,23 @@ async def welcome_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await welcome_manager.handle_welcome_command(update, context, auth_manager)
 
 
+
+async def scrapenow_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message:
+        return
+    if not auth_manager.is_owner(update.message.from_user.id):
+        await update.message.reply_text("❌ `\"Owner only command\"`")
+        return
+
+    scheduler = context.application.bot_data.get("scheduler")
+    if not scheduler:
+        await update.message.reply_text("⚠️ `\"Scheduler not ready\"`")
+        return
+
+    await update.message.reply_text("⏱️ `\"Manual live scrape started\"`")
+    await scheduler.scrape_and_send_deals()
+
+
 async def handle_new_chat_members(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message or not update.message.new_chat_members:
         return
@@ -183,8 +135,7 @@ async def handle_new_chat_members(update: Update, context: ContextTypes.DEFAULT_
     for member in update.message.new_chat_members:
         if member.id == context.bot.id:
             await update.message.reply_text(
-                "🔒 This bot is not authorized in this group. "
-                "Ask the bot owner to send /auth here to enable deal notifications."
+                "🔒 `\"Bot not authorized in this chat\"`\n`\"Ask owner to run /auth\"`"
             )
         else:
             await welcome_manager.handle_new_member(update, context, auth_manager)
@@ -197,6 +148,7 @@ async def post_init(application: Application):
 
 
 def main():
+    print("Starting Indian E-commerce Deal Bot...")
     logger.info("Starting Indian E-commerce Deal Bot...")
 
     if not config.BOT_TOKEN:
@@ -216,8 +168,12 @@ def main():
     application.add_handler(CommandHandler("only", only_command))
     application.add_handler(CommandHandler("stats", stats_command))
     application.add_handler(CommandHandler("welcome", welcome_command))
+    application.add_handler(CommandHandler("scrapenow", scrapenow_command))
     application.add_handler(MessageHandler(filters.StatusUpdate.NEW_CHAT_MEMBERS, handle_new_chat_members))
 
+    print("Bot started successfully!")
+    print(f"Scraping interval: {config.SCRAPE_INTERVAL_SECONDS} seconds")
+    print(f"Owner ID: {config.OWNER_ID}")
     logger.info("Bot started successfully!")
     logger.info("Scraping interval: %s minutes", config.SCRAPE_INTERVAL)
     logger.info("Owner ID: %s", config.OWNER_ID)

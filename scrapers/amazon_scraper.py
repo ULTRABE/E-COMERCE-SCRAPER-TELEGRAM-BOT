@@ -1,66 +1,85 @@
 from typing import Dict, List
 
+import config
+
 from .base_scraper import BaseScraper
 
 
 class AmazonScraper(BaseScraper):
     def __init__(self):
         super().__init__()
-        self.site_name = "Amazon India"
-        self.update_logger()
-        self.base_url = "https://www.amazon.in"
+        self.site_name = "Amazon"
         self.deal_urls = [
-            f"{self.base_url}/deals",
-            f"{self.base_url}/gp/goldbox",
-            f"{self.base_url}/b?node=1968024031",
+            "https://www.amazon.in/deals",
+            "https://www.amazon.in/gp/goldbox",
+            "https://www.amazon.in/s?i=todays-deals",
+            "https://www.amazon.in/s?k=discount",
         ]
-        self.card_selectors = [
-            "div[data-deal-id]",
-            "div[data-asin]",
-            "div.a-section[data-asin]",
-            "div.s-result-item",
-        ]
-        self.title_selectors = [
-            "a[aria-label]",
-            "span.a-truncate-full",
-            "span.a-size-base-plus",
-            "span.a-size-medium",
-        ]
-        self.price_selectors = [
-            "span.a-price > span.a-offscreen",
-            "span.a-price-whole",
-            "span.a-color-price",
-        ]
-        self.original_selectors = ["span.a-text-price", "span.a-price.a-text-price"]
-        self.discount_selectors = ["span.savingsPercentage", "span.a-color-secondary"]
-        self.url_selectors = ["a.a-link-normal", "a.a-link-normal.s-no-outline", "a"]
 
     def scrape(self) -> List[Dict]:
-        deals: List[Dict] = []
-        soup, used_url = self.get_page_from_urls(self.deal_urls)
-        if not soup:
-            self.logger.error("%s: unable to fetch any deal page", self.site_name)
-            return deals
+        deals = []
 
-        if "captcha" in soup.get_text(" ").lower():
-            self.logger.warning("%s: captcha detected on %s", self.site_name, used_url)
-            return deals
+        for url in self.deal_urls:
+            soup = self.get_page(url)
+            if not soup:
+                continue
 
-        cards = self.select_all(soup, self.card_selectors)
-        self.logger.info("%s: found %s cards from %s", self.site_name, len(cards), used_url)
+            deal_items = soup.select("div[data-asin]")
+            for item in deal_items:
+                asin = item.get("data-asin", "").strip()
+                if not asin:
+                    continue
 
-        for card in cards[:40]:
-            deal = self.build_deal(
-                card,
-                self.base_url,
-                self.title_selectors,
-                self.price_selectors,
-                self.url_selectors,
-                self.original_selectors,
-                self.discount_selectors,
-            )
-            if deal:
-                deals.append(deal)
+                try:
+                    title_elem = (
+                        item.select_one("h2 a span")
+                        or item.select_one("span.a-size-base-plus")
+                        or item.select_one("img[alt]")
+                    )
+                    product_name = (
+                        title_elem.get_text(strip=True)
+                        if title_elem and hasattr(title_elem, "get_text")
+                        else title_elem.get("alt", "")
+                        if title_elem
+                        else ""
+                    )
+                    if len(product_name) < 8:
+                        continue
 
-        self.logger.info("%s: parsed %s deals", self.site_name, len(deals))
-        return deals[:15]
+                    link_elem = item.select_one("a.a-link-normal[href]")
+                    raw_url = link_elem.get("href", "") if link_elem else f"/dp/{asin}"
+                    product_url = self.normalize_url(raw_url, "https://www.amazon.in")
+
+                    deal_elem = item.select_one("span.a-price span.a-offscreen") or item.select_one("span.a-price-whole")
+                    original_elem = item.select_one("span.a-text-price span.a-offscreen") or item.select_one("span.a-price.a-text-price span")
+
+                    deal_price = self.extract_price(deal_elem.get_text(" ", strip=True) if deal_elem else "")
+                    original_price = self.extract_price(original_elem.get_text(" ", strip=True) if original_elem else "")
+
+                    if deal_price <= 0:
+                        continue
+
+                    if original_price <= 0:
+                        original_price = round(deal_price * 1.2, 2)
+
+                    discount = self.calculate_discount(original_price, deal_price)
+                    if discount < config.MIN_DISCOUNT:
+                        continue
+
+                    image_url = self.extract_image_url(item, "https://www.amazon.in")
+
+                    deals.append(
+                        {
+                            "product_name": product_name,
+                            "deal_price": int(deal_price),
+                            "original_price": int(original_price),
+                            "discount": discount,
+                            "url": product_url,
+                            "site": self.site_name,
+                            "image_url": image_url,
+                        }
+                    )
+                except Exception as e:
+                    print(f"Error parsing Amazon deal: {e}")
+
+        return deals[:60]

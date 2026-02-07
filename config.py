@@ -22,21 +22,14 @@ def _get_int_env(name: str, default: int = 0) -> int:
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 OWNER_ID = _get_int_env("OWNER_ID", 0)
 CHANNEL_URL = os.getenv("CHANNEL_URL", "")
+CHANNEL_BUTTON_TEXT = os.getenv("CHANNEL_BUTTON_TEXT", "🚀 Join Channel")
 
 DATABASE_PATH = "bot_data.db"
-SCRAPE_INTERVAL = 3
-USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-
-BETTER_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/121.0.0.0 Safari/537.36",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
-    "Accept-Language": "en-US,en;q=0.9,en-IN;q=0.8",
-    "Accept-Encoding": "gzip, deflate, br",
-    "Connection": "keep-alive",
-    "Upgrade-Insecure-Requests": "1",
-    "Sec-Fetch-Dest": "document",
-    "Sec-Fetch-Mode": "navigate",
-    "Sec-Fetch-Site": "none",
-    "Cache-Control": "max-age=0",
-    "DNT": "1",
-}
+SCRAPE_INTERVAL_SECONDS = max(30, _get_int_env("SCRAPE_INTERVAL_SECONDS", 60))
+MIN_DISCOUNT = max(1, _get_int_env("MIN_DISCOUNT", 5))
+MAX_DEALS_PER_RUN = max(5, _get_int_env("MAX_DEALS_PER_RUN", 40))
+USER_AGENT = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/124.0.0.0 Safari/537.36"
+)

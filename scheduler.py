@@ -1,5 +1,4 @@
 import asyncio
-import logging
 
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
@@ -24,7 +23,16 @@ class DealScheduler:
         self.keyword_manager = KeywordManager(db)
         self.proxy_manager = ProxyManager()
         self.is_running = False
-        self.logger = logging.getLogger(self.__class__.__name__)
+
+    async def _run_single_scraper(self, scraper_class):
+        scraper = scraper_class()
+        scraper_name = scraper.site_name
+        proxies = self.proxy_manager.get_proxies_for_scraper(scraper_name, 5)
+        scraper.set_proxies(proxies)
+        print(f"Scraping {scraper_name}...")
+        deals = await asyncio.to_thread(scraper.scrape)
+        print(f"Found {len(deals)} deals from {scraper_name}")
+        return deals
 
     async def scrape_and_send_deals(self):
         if self.is_running:
@@ -32,113 +40,101 @@ class DealScheduler:
             return
 
         self.is_running = True
-        self.logger.info("Starting deal scraping...")
+        print("Starting deal scraping...")
 
         try:
             all_deals = []
-            scrape_summary = {}
-
-            for scraper_class in ALL_SCRAPERS:
-                scraper = None
-                try:
-                    scraper = scraper_class()
-                    scraper_name = scraper.site_name
-                    scraper.set_proxy_manager(self.proxy_manager)
-                    proxies = self.proxy_manager.get_proxies_for_scraper(scraper_name, 5)
-                    scraper.set_proxies(proxies)
-                    self.logger.info(
-                        "Scraping %s with %s proxies",
-                        scraper_name,
-                        len(proxies),
-                    )
-                    deals = scraper.scrape()
-                    all_deals.extend(deals)
-                    scrape_summary[scraper_name] = len(deals)
-                    self.logger.info("Found %s deals from %s", len(deals), scraper_name)
-                    await asyncio.sleep(2)
-                except Exception as exc:
-                    scraper_name = scraper.site_name if scraper else scraper_class.__name__
-                    scrape_summary[scraper_name] = 0
-                    self.logger.exception("Error in scraper %s: %s", scraper_name, exc)
+            results = await asyncio.gather(
+                *(self._run_single_scraper(scraper_class) for scraper_class in ALL_SCRAPERS),
+                return_exceptions=True,
+            )
+            for result in results:
+                if isinstance(result, Exception):
+                    print(f"Error in scraper run: {result}")
                     continue
+                all_deals.extend(result)
 
-            self.logger.info("Scrape summary: %s", scrape_summary)
-            self.logger.info("Total deals scraped: %s", len(all_deals))
-
+            print(f"Total deals scraped: {len(all_deals)}")
             processed_deals = self.deal_processor.process_deals(all_deals)
-            self.logger.info("Unique deals after processing: %s", len(processed_deals))
+            print(f"Unique/new deals after processing: {len(processed_deals)}")
 
             if not processed_deals:
-                self.logger.warning("No new deals to send")
+                print("No new live deals to send")
                 return
 
             authorized_chats = self.db.get_authorized_chats()
-            self.logger.info("Sending to %s authorized chats", len(authorized_chats))
+            print(f"Sending to {len(authorized_chats)} authorized chats")
 
             for chat_id in authorized_chats:
-                try:
-                    sent_count = 0
-                    for deal in processed_deals:
-                        if self.keyword_manager.matches_keywords(chat_id, deal["product_name"]):
-                            message = MessageFormatter.format_deal(deal)
-                            image_url = deal.get("image_url", "")
+                sent_count = 0
+                for deal in processed_deals:
+                    if not self.keyword_manager.matches_keywords(chat_id, deal["product_name"]):
+                        continue
 
-                            try:
-                                if image_url:
-                                    await self.bot.send_photo(
-                                        chat_id=chat_id,
-                                        photo=image_url,
-                                        caption=message,
-                                        parse_mode=ParseMode.MARKDOWN,
-                                    )
-                                else:
-                                    await self.bot.send_message(
-                                        chat_id=chat_id,
-                                        text=message,
-                                        parse_mode=ParseMode.MARKDOWN,
-                                        disable_web_page_preview=False,
-                                    )
-                                sent_count += 1
-                                self.db.increment_stat("deals_sent")
-                            except Exception as msg_err:
-                                self.logger.warning("Error sending deal message: %s", msg_err)
-                                try:
-                                    await self.bot.send_message(
-                                        chat_id=chat_id,
-                                        text=message,
-                                        parse_mode=ParseMode.MARKDOWN,
-                                        disable_web_page_preview=False,
-                                    )
-                                    sent_count += 1
-                                    self.db.increment_stat("deals_sent")
-                                except Exception:
-                                    self.logger.exception("Failed to send fallback message")
+                    message = MessageFormatter.format_deal(deal)
+                    image_url = deal.get("image_url", "")
+                    can_send_photo = bool(image_url) and not any(
+                        k in image_url.lower()
+                        for k in ["40x40", "60x60", "80x80", "thumb", "thumbnail", "sprite"]
+                    )
 
-                            await asyncio.sleep(1)
+                    try:
+                        if can_send_photo:
+                            await self.bot.send_photo(
+                                chat_id=chat_id,
+                                photo=image_url,
+                                caption=message,
+                                parse_mode=ParseMode.MARKDOWN,
+                            )
+                        else:
+                            await self.bot.send_message(
+                                chat_id=chat_id,
+                                text=message,
+                                parse_mode=ParseMode.MARKDOWN,
+                                disable_web_page_preview=False,
+                            )
+                        sent_count += 1
+                        self.db.increment_stat("deals_sent")
+                    except Exception as msg_err:
+                        print(f"Error sending deal message: {msg_err}")
+                        try:
+                            await self.bot.send_message(
+                                chat_id=chat_id,
+                                text=message,
+                                parse_mode=ParseMode.MARKDOWN,
+                                disable_web_page_preview=False,
+                            )
+                            sent_count += 1
+                            self.db.increment_stat("deals_sent")
+                        except Exception:
+                            pass
 
-                    self.logger.info("Sent %s deals to chat %s", sent_count, chat_id)
-                except Exception as exc:
-                    self.logger.exception("Error sending to chat %s: %s", chat_id, exc)
-                    continue
+                    await asyncio.sleep(0.15)
 
-            self.db.cleanup_old_deals(7)
-        except Exception as exc:
-            self.logger.exception("Error in scrape_and_send_deals: %s", exc)
+                print(f"Sent {sent_count} deals to chat {chat_id}")
+
+            self.db.cleanup_old_deals(3)
+
+        except Exception as e:
+            print(f"Error in scrape_and_send_deals: {e}")
         finally:
             self.is_running = False
-            self.logger.info("Scraping complete")
+            print("Scraping complete")
 
     def start(self):
         self.scheduler.add_job(
             self.scrape_and_send_deals,
-            trigger=IntervalTrigger(minutes=config.SCRAPE_INTERVAL),
+            trigger=IntervalTrigger(seconds=config.SCRAPE_INTERVAL_SECONDS),
             id="deal_scraper",
             name="Scrape and send deals",
             replace_existing=True,
+            coalesce=True,
+            max_instances=1,
         )
 
         self.scheduler.start()
-        self.logger.info("Scheduler started - scraping every %s minutes", config.SCRAPE_INTERVAL)
+        print(f"Scheduler started - scraping every {config.SCRAPE_INTERVAL_SECONDS} seconds")
+        asyncio.create_task(self.scrape_and_send_deals())
 
     def stop(self):
         self.scheduler.shutdown()
