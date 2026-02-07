@@ -9,6 +9,8 @@ class FlipkartScraper(BaseScraper):
     def __init__(self):
         super().__init__()
         self.site_name = "Flipkart"
+        self.update_logger()
+        self.base_url = "https://www.flipkart.com"
         self.deal_urls = [
             "https://www.flipkart.com/offers-store",
             "https://www.flipkart.com/search?q=deals+of+the+day",

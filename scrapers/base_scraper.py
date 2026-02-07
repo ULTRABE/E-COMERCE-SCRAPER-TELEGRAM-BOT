@@ -22,7 +22,7 @@ class BaseScraper:
         }
         self.session = requests.Session()
         self.session.headers.update(self.headers)
-        self.proxies = []
+        self.proxies: List[Dict[str, str]] = []
         self.current_proxy_index = 0
 
     def set_proxies(self, proxies: List[Dict]):

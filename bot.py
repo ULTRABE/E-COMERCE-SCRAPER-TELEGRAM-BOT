@@ -10,6 +10,11 @@ from keyword_manager import KeywordManager
 from scheduler import DealScheduler
 from welcome_manager import WelcomeManager
 
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s - %(message)s",
+)
+logger = logging.getLogger("deal-bot")
 
 db = Database()
 auth_manager = AuthManager(db)
@@ -37,6 +42,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(welcome_message, reply_markup=_channel_markup(), disable_web_page_preview=True)
 
 
+
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
@@ -53,6 +59,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "`\"/welcome <message>\"` → `Owner welcome template`"
     )
     await update.message.reply_text(help_message, reply_markup=_channel_markup(), disable_web_page_preview=True)
+
 
 
 async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -142,13 +149,14 @@ async def post_init(application: Application):
 
 def main():
     print("Starting Indian E-commerce Deal Bot...")
+    logger.info("Starting Indian E-commerce Deal Bot...")
 
     if not config.BOT_TOKEN:
-        print("Error: BOT_TOKEN not found in environment variables")
+        logger.error("BOT_TOKEN not found in environment variables")
         return
 
     if not config.OWNER_ID:
-        print("Error: OWNER_ID not found in environment variables")
+        logger.error("OWNER_ID not found in environment variables")
         return
 
     application = Application.builder().token(config.BOT_TOKEN).post_init(post_init).build()
@@ -166,6 +174,9 @@ def main():
     print("Bot started successfully!")
     print(f"Scraping interval: {config.SCRAPE_INTERVAL_SECONDS} seconds")
     print(f"Owner ID: {config.OWNER_ID}")
+    logger.info("Bot started successfully!")
+    logger.info("Scraping interval: %s minutes", config.SCRAPE_INTERVAL)
+    logger.info("Owner ID: %s", config.OWNER_ID)
 
     application.run_polling(allowed_updates=Update.ALL_TYPES)
 

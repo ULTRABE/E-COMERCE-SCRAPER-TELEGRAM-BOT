@@ -1,5 +1,10 @@
+import logging
 import random
-from typing import List, Dict, Optional
+import time
+from typing import Dict, List, Optional
+
+import requests
+
 
 class ProxyManager:
     PROXIES = [
@@ -54,48 +59,87 @@ class ProxyManager:
         "203033:JmNd95Z3vcX:77.83.170.222:8800",
         "203033:JmNd95Z3vcX:77.83.170.91:8800",
     ]
-    
+
+    HEALTH_CHECK_URL = "https://httpbin.org/ip"
+    COOLDOWN_SECONDS = 300
+
     def __init__(self):
-        self.failed_proxies = set()
+        self.failed_proxies: Dict[str, float] = {}
         self.proxy_pool = self.PROXIES.copy()
+        self.proxy_stats: Dict[str, Dict[str, int]] = {}
         random.shuffle(self.proxy_pool)
-    
+        self.logger = logging.getLogger(self.__class__.__name__)
+
     def _parse_proxy(self, proxy_str: str) -> Dict[str, str]:
-        parts = proxy_str.split(':')
+        parts = proxy_str.split(":")
         if len(parts) != 4:
             return {}
-        
+
         username, password, host, port = parts
         proxy_url = f"http://{username}:{password}@{host}:{port}"
-        
+
         return {
-            'http': proxy_url,
-            'https': proxy_url
+            "http": proxy_url,
+            "https": proxy_url,
         }
-    
+
+    def _proxy_matches(self, proxy_str: str, proxy_dict: Dict[str, str]) -> bool:
+        if not proxy_dict:
+            return False
+        proxy_repr = str(proxy_dict)
+        parts = proxy_str.split(":")
+        return len(parts) == 4 and parts[2] in proxy_repr and parts[3] in proxy_repr
+
+    def _is_proxy_available(self, proxy_str: str) -> bool:
+        failed_at = self.failed_proxies.get(proxy_str)
+        if not failed_at:
+            return True
+        if time.time() - failed_at >= self.COOLDOWN_SECONDS:
+            self.failed_proxies.pop(proxy_str, None)
+            return True
+        return False
+
     def get_proxies_for_scraper(self, scraper_name: str, count: int = 5) -> List[Dict[str, str]]:
-        available_proxies = [p for p in self.proxy_pool if p not in self.failed_proxies]
-        
-        if len(available_proxies) < count:
-            self.failed_proxies.clear()
-            available_proxies = self.proxy_pool.copy()
-        
+        available_proxies = [p for p in self.proxy_pool if self._is_proxy_available(p)]
+        if not available_proxies:
+            self.logger.warning("No healthy proxies available for %s. Falling back to direct.", scraper_name)
+            return []
+
         selected = random.sample(available_proxies, min(count, len(available_proxies)))
+        self.logger.info("%s proxies selected for %s", len(selected), scraper_name)
         return [self._parse_proxy(p) for p in selected]
-    
+
     def mark_proxy_failed(self, proxy_dict: Dict[str, str]):
         for proxy_str in self.PROXIES:
-            if proxy_str in str(proxy_dict):
-                self.failed_proxies.add(proxy_str)
+            if self._proxy_matches(proxy_str, proxy_dict):
+                self.failed_proxies[proxy_str] = time.time()
+                stats = self.proxy_stats.setdefault(proxy_str, {"success": 0, "fail": 0})
+                stats["fail"] += 1
+                self.logger.warning("Marked proxy failed: %s", proxy_str)
                 break
-    
+
+    def mark_proxy_success(self, proxy_dict: Dict[str, str]):
+        for proxy_str in self.PROXIES:
+            if self._proxy_matches(proxy_str, proxy_dict):
+                stats = self.proxy_stats.setdefault(proxy_str, {"success": 0, "fail": 0})
+                stats["success"] += 1
+                if proxy_str in self.failed_proxies:
+                    self.failed_proxies.pop(proxy_str, None)
+                break
+
     def get_random_proxy(self) -> Optional[Dict[str, str]]:
-        available_proxies = [p for p in self.proxy_pool if p not in self.failed_proxies]
-        
+        available_proxies = [p for p in self.proxy_pool if self._is_proxy_available(p)]
         if not available_proxies:
-            self.failed_proxies.clear()
-            available_proxies = self.proxy_pool.copy()
-        
-        if available_proxies:
-            return self._parse_proxy(random.choice(available_proxies))
-        return None
+            self.logger.warning("No healthy proxies available. Returning None.")
+            return None
+        return self._parse_proxy(random.choice(available_proxies))
+
+    def check_proxy_health(self, proxy_dict: Dict[str, str], timeout: int = 5) -> bool:
+        try:
+            response = requests.get(self.HEALTH_CHECK_URL, proxies=proxy_dict, timeout=timeout)
+            if response.status_code == 200:
+                self.mark_proxy_success(proxy_dict)
+                return True
+        except requests.RequestException:
+            self.mark_proxy_failed(proxy_dict)
+        return False
